@@ -125,7 +125,7 @@ sub livecheck {
     oops("cannot open $k") if !open(F, "$dir/$k");
     my $z = <F>;
     if($z ne $files->{$k}){
-        oops1("file $k wrong contents");
+        oops1("file $k wrong contents $z\n$files->{$k}");
     }
     close(F);
 }
