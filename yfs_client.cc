@@ -10,23 +10,25 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-<<<<<<< HEAD
-=======
-using namespace std;
+//<<<<<<< HEAD
+//=======
+/*using namespace std;
 
 yfs_client::yfs_client()
 {
     ec = new extent_client();
 
-}
+}*/
 
->>>>>>> lab1
+//>>>>>>> lab1
 yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
   ec = new extent_client(extent_dst);
   lc = new lock_client(lock_dst);
+  lc->acquire(1);
   if (ec->put(1, "") != extent_protocol::OK)
       printf("error init root dir\n"); // XYB: init root dir
+  lc->release(1);
 }
 
 
@@ -93,6 +95,8 @@ yfs_client::getfile(inum inum, fileinfo &fin)
 {
     int r = OK;
 
+    lc->acquire(inum);
+
     printf("getfile %016llx\n", inum);
     extent_protocol::attr a;
     if (ec->getattr(inum, a) != extent_protocol::OK) {
@@ -107,6 +111,8 @@ yfs_client::getfile(inum inum, fileinfo &fin)
     printf("getfile %016llx -> sz %llu\n", inum, fin.size);
 
 release:
+    lc->release(inum);
+
     return r;
 }
 
@@ -114,6 +120,8 @@ int
 yfs_client::getdir(inum inum, dirinfo &din)
 {
     int r = OK;
+
+    lc->acquire(inum);
 
     printf("getdir %016llx\n", inum);
     extent_protocol::attr a;
@@ -126,6 +134,8 @@ yfs_client::getdir(inum inum, dirinfo &din)
     din.ctime = a.ctime;
 
 release:
+    lc->release(inum);
+
     return r;
 }
 
@@ -149,12 +159,16 @@ yfs_client::setattr(inum ino, size_t size)
      * note: get the content of inode ino, and modify its content
      * according to the size (<, =, or >) content length.
      */
+    lc->acquire(ino);
+
     std::string buf;
     r = ec->get(ino, buf);
 
     buf.resize(size);
 
     r = ec->put(ino, buf);
+
+    lc->release(ino);
 
     return r;
 }
@@ -169,6 +183,8 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
      * note: lookup is what you need to check if file exist;
      * after create file or dir, you must remember to modify the parent infomation.
      */
+    lc->acquire(parent);
+
     bool existed;
     r = lookup(parent,name,existed,ino_out);
     if (existed)
@@ -181,6 +197,8 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
 
     buf.append('/'+std::string(name)+'/'+filename(ino_out));
     ec->put(parent,buf);
+
+    lc->release(parent);
 
     return r;
 }
@@ -196,6 +214,8 @@ yfs_client::mkdir(inum parent, const char *name, mode_t mode, inum &ino_out)
      * note: lookup is what you need to check if directory exist;
      * after create file or dir, you must remember to modify the parent infomation.
      */
+    lc->acquire(parent);
+
     bool existed = false;
     r = lookup(parent,name,existed,ino_out);
 
@@ -208,6 +228,9 @@ yfs_client::mkdir(inum parent, const char *name, mode_t mode, inum &ino_out)
     ec->get(parent,buf);
     buf.append('/'+std::string(name)+'/'+filename(ino_out));
     ec->put(parent,buf);
+
+    lc->release(parent);
+
     return r;
 }
 
@@ -300,6 +323,8 @@ yfs_client::write(inum ino, size_t size, off_t off, const char *data,
      * note: write using ec->put().
      * when off > length of original file, fill the holes with '\0'.
      */
+    lc->acquire(ino);
+
     std::string buf;
     r = ec->get(ino, buf);
 
@@ -314,6 +339,8 @@ yfs_client::write(inum ino, size_t size, off_t off, const char *data,
     r = ec->put(ino, buf);
 
     bytes_written = size;
+
+    lc->release(ino);
     
     return r;
 }
@@ -327,6 +354,7 @@ int yfs_client::unlink(inum parent,const char *name)
      * note: you should remove the file using ec->remove,
      * and update the parent directory content.
      */
+    lc->acquire(parent);
 
     inum ino_out;
     bool existed = true;
@@ -346,6 +374,8 @@ int yfs_client::unlink(inum parent,const char *name)
     buf.replace(first,entry.size(),"");
 
     r = ec->put(parent, buf);
+
+    lc->release(parent);
 
     return r;
 }
