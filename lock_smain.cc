@@ -45,9 +45,9 @@ main(int argc, char *argv[])
   server.reg(lock_protocol::stat, &ls, &lock_server_cache::stat);
   server.reg(lock_protocol::release, &ls, &lock_server_cache::release);
   server.reg(lock_protocol::acquire, &ls, &lock_server_cache::acquire);
-=======
+
   server.reg(lock_protocol::release, &ls, &lock_server::release);
->>>>>>> lab2
+
 #endif
 
 
