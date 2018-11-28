@@ -11,9 +11,6 @@
 #include "lang/verify.h"
 
 
-// Classes that inherit lock_release_user can override dorelease so that 
-// that they will be called when lock_client releases a lock.
-// You will not need to do anything with this class until Lab 6.
 class lock_release_user {
  public:
   virtual void dorelease(lock_protocol::lockid_t) = 0;
@@ -26,6 +23,21 @@ class lock_client_cache : public lock_client {
   int rlock_port;
   std::string hostname;
   std::string id;
+  enum lock_client_statu {NONE, FREE, LOCKED, ACQUIRING, RELEASING};
+
+  struct lock_statu
+  {
+    lock_client_statu statu;
+    pthread_cond_t incond;
+    pthread_cond_t outcond;
+
+    bool revoke;
+    bool retry;
+  };
+  std::map<lock_protocol::lockid_t, lock_statu> lock_status;
+
+  pthread_mutex_t mutex;
+  pthread_cond_t cond;
  public:
   static int last_port;
   lock_client_cache(std::string xdst, class lock_release_user *l = 0);
