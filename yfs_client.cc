@@ -24,7 +24,7 @@ yfs_client::yfs_client()
 yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
   ec = new extent_client(extent_dst);
-  lc = new lock_client(lock_dst);
+  lc = new lock_client_cache(lock_dst);
   lc->acquire(1);
   if (ec->put(1, "") != extent_protocol::OK)
       printf("error init root dir\n"); // XYB: init root dir
@@ -97,7 +97,7 @@ yfs_client::getfile(inum inum, fileinfo &fin)
 
     lc->acquire(inum);
 
-    printf("getfile %016llx\n", inum);
+    printf("getfile %016llx\n", inum);fflush(stdout);
     extent_protocol::attr a;
     if (ec->getattr(inum, a) != extent_protocol::OK) {
         r = IOERR;
@@ -108,7 +108,7 @@ yfs_client::getfile(inum inum, fileinfo &fin)
     fin.mtime = a.mtime;
     fin.ctime = a.ctime;
     fin.size = a.size;
-    printf("getfile %016llx -> sz %llu\n", inum, fin.size);
+    printf("getfile %016llx -> sz %llu\n", inum, fin.size);fflush(stdout);
 
 release:
     lc->release(inum);
@@ -256,6 +256,7 @@ yfs_client::lookup(inum parent, const char *name, bool &found, inum &ino_out)
             found = true;
             ino_out = it->inum;
             r = EXIST;
+	    printf("found");fflush(stdout);
         }
     }
     return r;
@@ -273,12 +274,15 @@ yfs_client::readdir(inum dir, std::list<dirent> &list)
      */
     std::string buf;
     r = ec->get(dir, buf);
+
+    printf("yfs_buf:%d",buf.size());fflush(stdout);
     unsigned int first = 1,last=0;
     struct dirent *entry = new dirent(); 
 
     while (last<buf.size()) 
     {
         last = buf.find('/',first);
+printf("last:%d",last);fflush(stdout);
         entry->name = buf.substr(first,last-first);
         first = last+1;
 

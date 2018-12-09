@@ -25,6 +25,7 @@ int extent_server::create(uint32_t type, extent_protocol::extentid_t &id)
 
 int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
 {
+  printf("extent_server: put %lld %s\n", id, buf.c_str());
   id &= 0x7fffffff;
   
   const char * cbuf = buf.c_str();
@@ -36,7 +37,7 @@ int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
 
 int extent_server::get(extent_protocol::extentid_t id, std::string &buf)
 {
-  printf("extent_server: get %lld\n", id);
+  
 
   id &= 0x7fffffff;
 
@@ -44,6 +45,7 @@ int extent_server::get(extent_protocol::extentid_t id, std::string &buf)
   char *cbuf = NULL;
 
   im->read_file(id, &cbuf, &size);
+
   if (size == 0)
     buf = "";
   else {
@@ -51,6 +53,7 @@ int extent_server::get(extent_protocol::extentid_t id, std::string &buf)
     free(cbuf);
   }
 
+  printf("extent_server: get %lld %d\n", id, buf.size());
   return extent_protocol::OK;
 }
 

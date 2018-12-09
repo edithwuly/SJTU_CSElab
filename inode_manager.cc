@@ -315,6 +315,7 @@ inode_manager::read_file(uint32_t inum, char **buf_out, int *size)
     }
   }
 
+printf("readfile:%s %d",*buf_out,fsize);
   unsigned int newtime = (unsigned int)time(NULL);
   ino->atime = newtime;
   ino->mtime = newtime;
@@ -339,6 +340,8 @@ inode_manager::write_file(uint32_t inum, const char *buf, int size)
    */
 
   inode_t *ino = get_inode(inum);
+
+printf("writefile:%s %d",buf,size);
 
   if (!ino) 
     return;
@@ -506,7 +509,38 @@ inode_manager::append_block(uint32_t inum, blockid_t &bid)
   /*
    * your code goes here.
    */
+  inode_t *ino = get_inode(inum);
 
+  unsigned int oldbnum = (ino->size+BLOCK_SIZE-1) / BLOCK_SIZE;
+  unsigned int newbnum = oldbnum + 1;
+
+  if (oldbnum < NDIRECT)
+    for (unsigned int i=oldbnum;i<MIN(newbnum, NDIRECT);i++)
+    {  
+      ino->blocks[i] = bm->alloc_block();
+      bid = ino->blocks[i];
+    }
+
+  if (newbnum > NDIRECT) 
+  {
+    blockid_t indirect[NINDIRECT];
+
+    if (oldbnum > NDIRECT) 
+      for (unsigned int i=oldbnum;i<newbnum;i++)
+      {
+        indirect[i-NDIRECT] = bm->alloc_block();
+        bid = indirect[i-NDIRECT];
+      }
+
+    else 
+    {
+      ino->blocks[NDIRECT] = bm->alloc_block();   
+      bid = ino->blocks[NDIRECT];
+      for (unsigned int i=NDIRECT;i<newbnum;i++) 
+        indirect[i-NDIRECT] = bm->alloc_block();
+    }
+    bm->write_block(ino->blocks[NDIRECT], (char *)indirect);
+  }
 }
 
 void
@@ -515,7 +549,20 @@ inode_manager::get_block_ids(uint32_t inum, std::list<blockid_t> &block_ids)
   /*
    * your code goes here.
    */
+  inode_t *ino = get_inode(inum);
 
+  unsigned int bnum = (ino->size+BLOCK_SIZE-1) / BLOCK_SIZE;
+
+  for (unsigned int i=0;i<bnum;i++)
+    block_ids.push_back(ino->blocks[i]);
+
+  if (bnum >= NDIRECT)
+  {
+    blockid_t indirect[NINDIRECT];
+    bm->read_block(ino->blocks[NDIRECT], (char *)indirect);
+    for (unsigned int i=NDIRECT;i<bnum;i++)
+      block_ids.push_back(indirect[i]);
+  }
 }
 
 void
@@ -524,7 +571,7 @@ inode_manager::read_block(blockid_t id, char buf[BLOCK_SIZE])
   /*
    * your code goes here.
    */
-
+  bm->read_block(id,buf);
 }
 
 void
@@ -533,7 +580,7 @@ inode_manager::write_block(blockid_t id, const char buf[BLOCK_SIZE])
   /*
    * your code goes here.
    */
-
+  bm->write_block(id,buf);
 }
 
 void
@@ -542,5 +589,5 @@ inode_manager::complete(uint32_t inum, uint32_t size)
   /*
    * your code goes here.
    */
-
+  inode_t *ino = get_inode(inum);
 }
