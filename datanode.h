@@ -26,6 +26,7 @@ private:
   bool SendHeartbeat();
 
   /* Feel free to add your member variables/functions here */
+  void SendLiveness();
 public:
   int init(const std::string &extent_dst, const std::string &namenode, const struct sockaddr_in *bindaddr);
   bool _ReadBlock(google::protobuf::io::CodedInputStream &is, google::protobuf::io::CodedOutputStream &os, google::protobuf::io::FileOutputStream &raw_os);

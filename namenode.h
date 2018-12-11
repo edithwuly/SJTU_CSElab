@@ -53,6 +53,19 @@ private:
   std::map<yfs_client::inum, uint32_t> pendingWrite;
 
   /* Add your member variables/functions here */
+  enum status{dn_NORMAL=0,dn_DEAD,dn_RECOVERY};
+  struct State{
+    time_t last;
+    status state;
+    State(time_t t,
+          status s):
+          last(t),
+          state(s){}
+  };
+  std::map<DatanodeIDProto, State> datanodes;
+  std::list<blockid_t> overwrites;
+  void CheckLiveness();
+
 private:
   void GetFileInfo();
   bool RecursiveLookup(const std::string &path, yfs_client::inum &ino, yfs_client::inum &last);

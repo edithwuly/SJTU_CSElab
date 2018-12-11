@@ -95,23 +95,18 @@ yfs_client::getfile(inum inum, fileinfo &fin)
 {
     int r = OK;
 
-    lc->acquire(inum);
-
-    printf("getfile %016llx\n", inum);fflush(stdout);
+    printf("getfile %016llx\n", inum);
     extent_protocol::attr a;
     if (ec->getattr(inum, a) != extent_protocol::OK) {
         r = IOERR;
-        goto release;
+        return r;
     }
 
     fin.atime = a.atime;
     fin.mtime = a.mtime;
     fin.ctime = a.ctime;
     fin.size = a.size;
-    printf("getfile %016llx -> sz %llu\n", inum, fin.size);fflush(stdout);
-
-release:
-    lc->release(inum);
+    printf("getfile %016llx -> sz %llu\n", inum, fin.size);
 
     return r;
 }
@@ -121,20 +116,15 @@ yfs_client::getdir(inum inum, dirinfo &din)
 {
     int r = OK;
 
-    lc->acquire(inum);
-
     printf("getdir %016llx\n", inum);
     extent_protocol::attr a;
     if (ec->getattr(inum, a) != extent_protocol::OK) {
         r = IOERR;
-        goto release;
+        return r;
     }
     din.atime = a.atime;
     din.mtime = a.mtime;
     din.ctime = a.ctime;
-
-release:
-    lc->release(inum);
 
     return r;
 }
@@ -244,7 +234,7 @@ yfs_client::lookup(inum parent, const char *name, bool &found, inum &ino_out)
      * note: lookup file from parent dir according to name;
      * you should design the format of directory content.
      */
-
+printf("yfs:lookup %lld %s\n",parent,name);fflush(stdout);
     std::list<dirent> entries;
     readdir(parent,entries);
     found = false;
@@ -255,8 +245,8 @@ yfs_client::lookup(inum parent, const char *name, bool &found, inum &ino_out)
 	{
             found = true;
             ino_out = it->inum;
-            r = EXIST;
-	    printf("found");fflush(stdout);
+            r = OK;
+	    printf("found\n");fflush(stdout);
         }
     }
     return r;
@@ -275,14 +265,13 @@ yfs_client::readdir(inum dir, std::list<dirent> &list)
     std::string buf;
     r = ec->get(dir, buf);
 
-    printf("yfs_buf:%d",buf.size());fflush(stdout);
+    printf("yfs_buf:%s\n",buf.c_str());fflush(stdout);
     unsigned int first = 1,last=0;
     struct dirent *entry = new dirent(); 
 
     while (last<buf.size()) 
     {
         last = buf.find('/',first);
-printf("last:%d",last);fflush(stdout);
         entry->name = buf.substr(first,last-first);
         first = last+1;
 
@@ -411,4 +400,5 @@ yfs_client::readlink(inum ino, std::string &link)
     r = ec->get(ino, link);
     return r;
 }
+
 

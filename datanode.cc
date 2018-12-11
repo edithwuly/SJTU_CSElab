@@ -36,25 +36,40 @@ int DataNode::init(const string &extent_dst, const string &namenode, const struc
   }
 
   /* Add your initialization here */
+  NewThread(this, &DataNode::SendLiveness);
 
   return 0;
 }
 
 bool DataNode::ReadBlock(blockid_t bid, uint64_t offset, uint64_t len, string &buf) {
   /* Your lab4 part 2 code */
-  printf("datanode\tReadBlock\tbid:%d\toff:%d\tlen:%d\n",bid,offset,len);fflush(stdout);
-  if (ec->read_block(bid,buf) == extent_protocol::OK)
-    return true;
+  extent_protocol::status ret;
+  string tmp;
+  if(ec->read_block(bid,tmp) != extent_protocol::OK)
+      return false;
 
-  return false;
+  buf = tmp.substr(offset,len);
+  return true;
 }
 
 bool DataNode::WriteBlock(blockid_t bid, uint64_t offset, uint64_t len, const string &buf) {
   /* Your lab4 part 2 code */
-  printf("datanode\tWriteBlock\tbid:%d\toff:%d\tlen:%d\n",bid,offset,len);fflush(stdout);
-  if (ec->write_block(bid,buf) == extent_protocol::OK)
-    return true;
+  string tmp;
+  if(ec->read_block(bid,tmp) != extent_protocol::OK)
+      return false;
+  tmp.replace(offset,len,buf);
 
-  return false;
+  if(ec->write_block(bid,tmp) != extent_protocol::OK)
+      return false;
+
+  return true;
 }
 
+void DataNode::SendLiveness()
+{
+  while(true)
+  {
+    SendHeartbeat();
+    sleep(1);
+  }
+}

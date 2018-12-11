@@ -57,26 +57,22 @@ block_manager::alloc_block()
    * note: you should mark the corresponding bit in block bitmap when alloc.
    * you need to think about which block you can start to be allocated.
    */
-  
-  blockid_t id=0;
-  char bitmap[BLOCK_SIZE];
-  for(int i = BBLOCK(id);i<BBLOCK(BLOCK_NUM);i++)
-  {
-    d->read_block(i, bitmap);
-    for(int j = 0;j<BLOCK_SIZE;j++)
-    {
-      for(unsigned char mask=0x80;mask>0 && id<BLOCK_NUM;mask=mask>>1)
-      {
-	if((bitmap[j] & mask) == 0)
-	{
-          bitmap[j] |= mask;
-	  d->write_block(i, bitmap);
-          return id;
-        }
-        id++;
-      }
+  uint32_t nblocks = sb.nblocks;
+  uint32_t min_num = IBLOCK(sb.ninodes,sb.nblocks)+1;
+  char buf[BLOCK_SIZE];
+
+  for (uint32_t i=min_num;i<nblocks;i++){
+    uint32_t map_block = BBLOCK(i);
+    read_block(map_block,buf);
+    int offset = i % BLOCK_SIZE;
+    if(buf[offset] == 0){ //empty block
+      buf[offset] = 1;    //mark the bit
+      write_block(map_block,buf);
+      return i;
     }
-  } 
+  }
+
+  printf("Block out of range!\n");
   return -1;
 }
 
@@ -88,12 +84,14 @@ block_manager::free_block(uint32_t id)
    * note: you should unmark the corresponding bit in the block bitmap when free.
    */
   
-  char bitmap[BLOCK_SIZE];
-  d->read_block(BBLOCK(id), bitmap);
-  unsigned char mask = 1<<(7- (id%BPB)%8);
-
-  bitmap[(id % BPB) / 8] = bitmap[(id % BPB) / 8] ^ mask;
-  d->write_block(BBLOCK(id), bitmap);
+  char buf[BLOCK_SIZE];
+  uint32_t map_block = BBLOCK(id);
+  read_block(map_block,buf);
+  int offset = id % BLOCK_SIZE;
+  buf[offset] = 0;    //umark the bit
+  write_block(map_block,buf);   
+  
+  return;
 }
 
 // The layout of disk should be like this:
@@ -113,21 +111,21 @@ block_manager::block_manager()
    */
 
   /* Alloc boot block */ 
-  alloc_block();
+  //alloc_block();
 
   /* Alloc super block */ 
-  alloc_block();
+  //alloc_block();
 
   /* Alloc bitmap */ 
-  uint32_t i;
+  /*uint32_t i;
   for (i = 0; i < BLOCK_NUM / BPB; i++) {
     alloc_block();
-  }
+  }*/
 
   /* Alloc inode table */ 
-  for (i = 0; i < INODE_NUM / IPB; i++) {
+  /*for (i = 0; i < INODE_NUM / IPB; i++) {
     alloc_block();
-  }
+  }*/
 }
 
 void
@@ -315,7 +313,6 @@ inode_manager::read_file(uint32_t inum, char **buf_out, int *size)
     }
   }
 
-printf("readfile:%s %d",*buf_out,fsize);
   unsigned int newtime = (unsigned int)time(NULL);
   ino->atime = newtime;
   ino->mtime = newtime;
@@ -341,7 +338,6 @@ inode_manager::write_file(uint32_t inum, const char *buf, int size)
 
   inode_t *ino = get_inode(inum);
 
-printf("writefile:%s %d",buf,size);
 
   if (!ino) 
     return;
@@ -514,33 +510,25 @@ inode_manager::append_block(uint32_t inum, blockid_t &bid)
   unsigned int oldbnum = (ino->size+BLOCK_SIZE-1) / BLOCK_SIZE;
   unsigned int newbnum = oldbnum + 1;
 
-  if (oldbnum < NDIRECT)
-    for (unsigned int i=oldbnum;i<MIN(newbnum, NDIRECT);i++)
-    {  
-      ino->blocks[i] = bm->alloc_block();
-      bid = ino->blocks[i];
-    }
+  bid = bm->alloc_block();
 
-  if (newbnum > NDIRECT) 
+  if (newbnum-1 < NDIRECT)
+    ino->blocks[newbnum-1] = bid;
+
+  else if (newbnum-1 == NDIRECT)
+    ino->blocks[NDIRECT] = bid;
+
+  else
   {
     blockid_t indirect[NINDIRECT];
 
-    if (oldbnum > NDIRECT) 
-      for (unsigned int i=oldbnum;i<newbnum;i++)
-      {
-        indirect[i-NDIRECT] = bm->alloc_block();
-        bid = indirect[i-NDIRECT];
-      }
+    indirect[oldbnum-NDIRECT] = bid;
 
-    else 
-    {
-      ino->blocks[NDIRECT] = bm->alloc_block();   
-      bid = ino->blocks[NDIRECT];
-      for (unsigned int i=NDIRECT;i<newbnum;i++) 
-        indirect[i-NDIRECT] = bm->alloc_block();
-    }
     bm->write_block(ino->blocks[NDIRECT], (char *)indirect);
   }
+
+  ino->size += BLOCK_SIZE;
+  put_inode(inum, ino);
 }
 
 void
@@ -553,11 +541,15 @@ inode_manager::get_block_ids(uint32_t inum, std::list<blockid_t> &block_ids)
 
   unsigned int bnum = (ino->size+BLOCK_SIZE-1) / BLOCK_SIZE;
 
-  for (unsigned int i=0;i<bnum;i++)
-    block_ids.push_back(ino->blocks[i]);
+  if (bnum < NDIRECT)
+    for (unsigned int i=0;i<bnum;i++)
+      block_ids.push_back(ino->blocks[i]);
 
   if (bnum >= NDIRECT)
   {
+    for (unsigned int i=0;i<NDIRECT;i++)
+      block_ids.push_back(ino->blocks[i]);
+
     blockid_t indirect[NINDIRECT];
     bm->read_block(ino->blocks[NDIRECT], (char *)indirect);
     for (unsigned int i=NDIRECT;i<bnum;i++)
@@ -590,4 +582,7 @@ inode_manager::complete(uint32_t inum, uint32_t size)
    * your code goes here.
    */
   inode_t *ino = get_inode(inum);
+  ino->size = size;
+  ino->mtime = time(NULL);
+  put_inode(inum, ino);
 }
